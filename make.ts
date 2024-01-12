@@ -10,7 +10,7 @@
 
 import { exec, cd, echo, mkdir, rm, test, grep, find } from 'shelljs';
 
-import { build as builder } from './external/builder';
+import { build } from './external/builder';
 
 var ROOT_DIR = __dirname + '/';
 var BUILD_DIR = ROOT_DIR + 'dist/';
@@ -33,9 +33,9 @@ function getVersionString() {
   return gitHash || '(unknown version)';
 }
 
-function getBuildConfig(options: any) {
-  var dest_dir = options.build_dir;
-  var setup = {
+function getBuildConfig(options: Setup) {
+  var dest_dir = options.build_dir ?? "";
+  var setup: Setup = {
     defines: {
       CHROME: false,
       FIREFOX: false,
@@ -64,6 +64,7 @@ function getBuildConfig(options: any) {
 
   return setup;
 }
+
 function cleanDirectory(dir: string) {
   if (test('-d', dir))
     rm('-rf', dir + '*'); // Append wildcard to preserve the directory
@@ -71,15 +72,16 @@ function cleanDirectory(dir: string) {
     mkdir('-p', dir);
 }
 
-function build(setup, output_root_dir: string) {
+function startBuild(setup: Setup, output_root_dir: string) {
   cleanDirectory(output_root_dir);
-  builder.build(setup);
+  build(setup);
   exec(ROOT_DIR + '/node_modules/.bin/lessc --strict-math=on "' + SRC_DIR + 'crxviewer.less" "' + output_root_dir + 'crxviewer.css"');
 }
 
 function removeFirefoxSpecificFiles() {
   rm('domain-fronter.js');
 }
+
 function removeTestFiles() {
   rm('lib/prettify/test-prism-language-detect.js');
   rm('lib/prettify/test-prism-li-lines.js');
@@ -130,7 +132,7 @@ function target_chrome() {
       [SRC_DIR + 'manifest.json', CHROME_BUILD_DIR]
     ]
   });
-  build(setup, CHROME_BUILD_DIR);
+  startBuild(setup, CHROME_BUILD_DIR);
 
   cd(CHROME_BUILD_DIR);
   removeFirefoxSpecificFiles();
@@ -149,7 +151,7 @@ function target_opera() {
       OPERA: true
     }
   });
-  build(setup, OPERA_BUILD_DIR);
+  startBuild(setup, OPERA_BUILD_DIR);
   cp(SRC_DIR + 'manifest_opera.json', OPERA_BUILD_DIR + 'manifest.json');
 
   cd(OPERA_BUILD_DIR);
@@ -169,7 +171,7 @@ function target_firefox() {
       FIREFOX: true
     }
   });
-  build(setup, FIREFOX_BUILD_DIR);
+  startBuild(setup, FIREFOX_BUILD_DIR);
   cp(SRC_DIR + 'manifest_firefox.json', FIREFOX_BUILD_DIR + 'manifest.json');
 
   cd(FIREFOX_BUILD_DIR);
@@ -181,11 +183,11 @@ function target_firefox() {
   lintDir(FIREFOX_BUILD_DIR);
 };
 
-function target_web  {
+function target_web() {
   echo();
   echo('Building online demo...');
   var dest_dir = WEB_BUILD_DIR;
-  var setup = {
+  var setup: Setup = {
     defines: {
       CHROME: false,
       FIREFOX: false,
@@ -208,7 +210,7 @@ function target_web  {
       [SRC_DIR + 'lib/crx-to-zip.js', dest_dir + 'lib'],
     ]
   };
-  build(setup, WEB_BUILD_DIR);
+  startBuild(setup, WEB_BUILD_DIR);
   lintDir(WEB_BUILD_DIR);
 };
 

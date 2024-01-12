@@ -1,9 +1,19 @@
 /* jshint node:true */
 /* globals cp, ls, mkdir, test */
 
-import fs from 'fs'
-import path from 'path'
-import vm from 'vm'
+import fs from 'fs';
+import path from 'path';
+import vm from 'vm';
+import { mkdir, cp, ls } from 'shelljs';
+
+interface Setup {
+  defines: Map<string, boolean | string>,
+  mkdirs: string[],
+  copy: string[][],
+  preprocess: string[][],
+  build_dir?: string,
+  preprocessCSS?: any
+}
 
 /**
  * A simple preprocessor that is based on the Firefox preprocessor
@@ -33,7 +43,7 @@ import vm from 'vm'
  * ++i;
  * //#endif
  */
-export function preprocess(inFilename: string, outFilename: string, defines: string[]) {
+export function preprocess(inFilename: string, outFilename: string, defines: Map<string, string>) {
   // TODO make this really read line by line.
   const lines = fs.readFileSync(inFilename).toString().split('\n')
   const totalLines = lines.length
@@ -80,11 +90,11 @@ export function preprocess(inFilename: string, outFilename: string, defines: str
       throw e // Some other error
     }
   }
-  function expand(line: string) {
+  function expand(line: string): string {
     line = line.replace(/__[\w]+__/g, function (variable: string) {
-      variable = variable.substring(2, variable.length - 2)
-      if (variable in defines) {
-        return defines[variable]
+      const variable_name: string = variable.substring(2, variable.length - 2)
+      if (variable_name in defines) {
+        return defines[variable_name]
       }
       return ''
     })
@@ -103,14 +113,14 @@ export function preprocess(inFilename: string, outFilename: string, defines: str
   // false (ignore lines until #endif)
   const STATE_ELSE_FALSE = 4
 
-  let line
-  let state = STATE_NONE
+  let line: string
+  let state: number = STATE_NONE
   const stack: number[] = []
   const control =
     /* jshint -W101 */
     /^(?:\/\/|<!--)\s*#(if|elif|else|endif|expand|include|error)\b(?:\s+(.*?)(?:-->)?$)?/
   /* jshint +W101 */
-  let lineNumber = 0
+  let lineNumber: number = 0
   var loc = function () {
     return fs.realpathSync(inFilename) + ':' + lineNumber
   }
@@ -277,7 +287,7 @@ export function preprocessCSS(mode: string, source: string, destination: string)
  *        .preprocess array of arrays of source and destination pairs of files
  *                    run through preprocessor.
  */
-export function build(setup) {
+export function build(setup: Setup) {
   const defines = setup.defines;
 
   (setup.mkdirs || []).forEach(function (directory) {
@@ -317,7 +327,7 @@ export function build(setup) {
  * Merge two defines arrays. Values in the second param will override values in
  * the first.
  */
-export function merge(defaults, defines) {
+export function merge(defaults: Map<string, any>, defines: Map<string, any>) {
   const ret = {}
   for (var key in defaults) {
     ret[key] = defaults[key]
