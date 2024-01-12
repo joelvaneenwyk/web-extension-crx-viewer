@@ -10,7 +10,7 @@
 
 import { exec, cd, echo, mkdir, rm, test, grep, find } from 'shelljs';
 
-import { build } from './external/builder';
+import { build, BuildConfig } from './external/builder';
 
 var ROOT_DIR = __dirname + '/';
 var BUILD_DIR = ROOT_DIR + 'dist/';
@@ -33,9 +33,9 @@ function getVersionString() {
   return gitHash || '(unknown version)';
 }
 
-function getBuildConfig(options: Setup) {
+function getBuildConfig(options: BuildConfig) {
   var dest_dir = options.build_dir ?? "";
-  var setup: Setup = {
+  var setup: BuildConfig = {
     defines: {
       CHROME: false,
       FIREFOX: false,
@@ -72,7 +72,7 @@ function cleanDirectory(dir: string) {
     mkdir('-p', dir);
 }
 
-function startBuild(setup: Setup, output_root_dir: string) {
+function startBuild(setup: BuildConfig, output_root_dir: string) {
   cleanDirectory(output_root_dir);
   build(setup);
   exec(ROOT_DIR + '/node_modules/.bin/lessc --strict-math=on "' + SRC_DIR + 'crxviewer.less" "' + output_root_dir + 'crxviewer.css"');
@@ -187,7 +187,7 @@ function target_web() {
   echo();
   echo('Building online demo...');
   var dest_dir = WEB_BUILD_DIR;
-  var setup: Setup = {
+  var setup: BuildConfig = {
     defines: {
       CHROME: false,
       FIREFOX: false,

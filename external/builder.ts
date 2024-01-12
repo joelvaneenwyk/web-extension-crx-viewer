@@ -4,15 +4,23 @@
 import fs from 'fs';
 import path from 'path';
 import vm from 'vm';
-import { mkdir, cp, ls } from 'shelljs';
+import { mkdir, cp, ls, test } from 'shelljs';
 
-interface Setup {
-  defines: Map<string, boolean | string>,
+export type BuildDefine = {
+  [key: string]: boolean | string;
+};
+
+export type Copy = [string, string]
+export type Preprocess = [string, string]
+export type PreprocessCSS = [string, string, string]
+
+export interface BuildConfig {
+  defines: BuildDefine,
   mkdirs: string[],
-  copy: string[][],
-  preprocess: string[][],
+  copy: Copy[],
+  preprocess: Preprocess[],
   build_dir?: string,
-  preprocessCSS?: any
+  preprocessCSS?: PreprocessCSS[]
 }
 
 /**
@@ -43,7 +51,7 @@ interface Setup {
  * ++i;
  * //#endif
  */
-export function preprocess(inFilename: string, outFilename: string, defines: Map<string, string>) {
+export function preprocess(inFilename: string, outFilename: string, defines: BuildDefine) {
   // TODO make this really read line by line.
   const lines = fs.readFileSync(inFilename).toString().split('\n')
   const totalLines = lines.length
@@ -66,12 +74,12 @@ export function preprocess(inFilename: string, outFilename: string, defines: Map
     }
     try {
       return vm.runInNewContext(code, defines, { displayErrors: false })
-    } catch (e) {
+    } catch (e: any) {
       throw new Error('Could not evaluate "' + code + '" at ' + loc() + '\n' +
         e.name + ': ' + e.message)
     }
   }
-  function include(file: string) {
+  function include(file: string): void {
     const realPath = fs.realpathSync(inFilename)
     const dir = path.dirname(realPath)
     try {
@@ -83,20 +91,22 @@ export function preprocess(inFilename: string, outFilename: string, defines: Map
         fullpath = path.join(dir, file)
       }
       preprocess(fullpath, writeLine, defines)
-    } catch (e) {
+    } catch (e: any) {
       if (e.code === 'ENOENT') {
         throw new Error('Failed to include "' + file + '" at ' + loc())
       }
       throw e // Some other error
     }
   }
-  function expand(line: string): string {
-    line = line.replace(/__[\w]+__/g, function (variable: string) {
+
+  function expand(line: string): void {
+    line = line.replace(/__[\w]+__/g, function (variable: string): string {
       const variable_name: string = variable.substring(2, variable.length - 2)
+      let variable_value: string = ''
       if (variable_name in defines) {
-        return defines[variable_name]
+        variable_value = defines[variable_name].toString()
       }
-      return ''
+      return variable_value
     })
     writeLine(line)
   }
@@ -201,25 +211,25 @@ const deprecatedInMozcentral = new RegExp('(^|\\W)(' + [
 ].join('|') + ')')
 
 export function preprocessCSS(mode: string, source: string, destination: string) {
-  function hasPrefixedFirefox(line) {
+  function hasPrefixedFirefox(line: string) {
     return (/(^|\W)-(ms|o|webkit)-\w/.test(line))
   }
 
-  function hasPrefixedMozcentral(line) {
+  function hasPrefixedMozcentral(line: string) {
     return (/(^|\W)-(ms|o|webkit)-\w/.test(line) ||
       deprecatedInMozcentral.test(line))
   }
 
-  function expandImports(content, baseUrl) {
+  function expandImports(content: string, baseUrl: string): string {
     return content.replace(/^\s*@import\s+url\(([^\)]+)\);\s*$/gm,
-      function (all, url) {
+      function (_all: string, url: string): string {
         const file = path.join(path.dirname(baseUrl), url)
         const imported = fs.readFileSync(file, 'utf8').toString()
         return expandImports(imported, file)
       })
   }
 
-  function removePrefixed(content: string, hasPrefixedFilter) {
+  function removePrefixed(content: string, hasPrefixedFilter: (line: string) => boolean): string {
     const lines = content.split(/\r?\n/g)
     let i = 0
     while (i < lines.length) {
@@ -287,25 +297,22 @@ export function preprocessCSS(mode: string, source: string, destination: string)
  *        .preprocess array of arrays of source and destination pairs of files
  *                    run through preprocessor.
  */
-export function build(setup: Setup) {
+export function build(setup: BuildConfig): void {
   const defines = setup.defines;
 
   (setup.mkdirs || []).forEach(function (directory) {
     mkdir('-p', directory)
   })
 
-  setup.copy.forEach(function (option) {
-    const source = option[0]
-    const destination = option[1]
+  setup.copy.forEach(function (option: Copy) {
+    const [source, destination] = option
     cp('-R', source, destination)
   })
 
-  setup.preprocess.forEach(function (option) {
-    let sources = option[0]
-    const destination = option[1]
-
-    sources = ls('-R', sources)
-    sources.forEach(function (source) {
+  setup.preprocess.forEach(function (option: Preprocess) {
+    const [sources, destination] = option
+    const source_paths = ls('-R', sources)
+    source_paths.forEach(function (source: string) {
       // ??? Warn if the source is wildcard and dest is file?
       let destWithFolder = destination
       if (test('-d', destination)) {
@@ -315,10 +322,8 @@ export function build(setup: Setup) {
     })
   });
 
-  (setup.preprocessCSS || []).forEach(function (option) {
-    const mode = option[0]
-    const source = option[1]
-    const destination = option[2]
+  (setup.preprocessCSS || []).forEach(function (option: PreprocessCSS) {
+    const [mode, source, destination] = option
     preprocessCSS(mode, source, destination)
   })
 }
@@ -327,8 +332,8 @@ export function build(setup: Setup) {
  * Merge two defines arrays. Values in the second param will override values in
  * the first.
  */
-export function merge(defaults: Map<string, any>, defines: Map<string, any>) {
-  const ret = {}
+export function merge(defaults: BuildDefine, defines: BuildDefine): BuildDefine {
+  const ret: BuildDefine = {}
   for (var key in defaults) {
     ret[key] = defaults[key]
   }
